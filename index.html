@@ -1,0 +1,119 @@
+index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deriv Live Ticks</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      background-color: #f4f6f8;
+      color: #333;
+    }
+    .card {
+      max-width: 450px;
+      padding: 1.5rem;
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    }
+    .status {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 1rem;
+    }
+    .status.connected {
+      color: #2e7d32;
+      font-weight: bold;
+    }
+    .status.error {
+      color: #c62828;
+    }
+    .price-display {
+      font-size: 2.2rem;
+      font-weight: bold;
+      margin: 1rem 0;
+      letter-spacing: -0.5px;
+    }
+    .price-up {
+      color: #2e7d32;
+    }
+    .price-down {
+      color: #c62828;
+    }
+    .timestamp {
+      font-size: 0.85rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Volatility 100 (1s) Index</h2>
+    <div id="status" class="status">Connecting to Deriv WebSocket...</div>
+    
+    <div id="price" class="price-display">--.--</div>
+    <div id="time" class="timestamp">Waiting for tick updates...</div>
+  </div>
+
+  <script>
+    // Paste your App ID string from Deriv here
+    const APP_ID = '34tokXwHOAsqQeuc6GX1A'; 
+    const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
+
+    const statusEl = document.getElementById('status');
+    const priceEl = document.getElementById('price');
+    const timeEl = document.getElementById('time');
+
+    let previousPrice = null;
+
+    ws.onopen = () => {
+      statusEl.textContent = 'Connected to Deriv API';
+      statusEl.classList.add('connected');
+
+      const request = {
+        ticks: '1HZ100V',
+        subscribe: 1
+      };
+      ws.send(JSON.stringify(request));
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.msg_type === 'tick') {
+        const currentPrice = data.tick.quote;
+        const tickTime = new Date(data.tick.epoch * 1000).toLocaleTimeString();
+
+        if (previousPrice !== null) {
+          if (currentPrice > previousPrice) {
+            priceEl.className = 'price-display price-up';
+          } else if (currentPrice < previousPrice) {
+            priceEl.className = 'price-display price-down';
+          }
+        }
+
+        priceEl.textContent = currentPrice.toFixed(2);
+        timeEl.textContent = `Last update: ${tickTime}`;
+        previousPrice = currentPrice;
+      }
+    };
+
+    ws.onerror = (error) => {
+
+      statusEl.textContent = 'Connection Error';
+      statusEl.className = 'status error';
+      console.error('WebSocket Error:', error);
+    };
+
+    ws.onclose = () => {
+      statusEl.textContent = 'Disconnected from Deriv';
+      statusEl.className = 'status error';
+    };
+  </script>
+
+</body>
+</html>
