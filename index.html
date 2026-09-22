@@ -1,10 +1,9 @@
-index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deriv Live Ticks</title>
+  <title>Deriv App with Login</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -19,99 +18,108 @@ index.html
       border-radius: 8px;
       box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
     }
+    .btn {
+      background-color: #ff444f;
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-bottom: 1rem;
+    }
+    .btn:hover {
+      background-color: #e03a44;
+    }
     .status {
       font-size: 0.9rem;
       color: #666;
+      margin-bottom: 0.5rem;
+    }
+    .user-info {
+      background: #e8f5e9;
+      padding: 0.8rem;
+      border-radius: 4px;
       margin-bottom: 1rem;
-    }
-    .status.connected {
-      color: #2e7d32;
-      font-weight: bold;
-    }
-    .status.error {
-      color: #c62828;
+      display: none;
     }
     .price-display {
       font-size: 2.2rem;
       font-weight: bold;
-      margin: 1rem 0;
-      letter-spacing: -0.5px;
-    }
-    .price-up {
-      color: #2e7d32;
-    }
-    .price-down {
-      color: #c62828;
-    }
-    .timestamp {
-      font-size: 0.85rem;
-      color: #888;
+      margin: 0.5rem 0;
     }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <h2>Volatility 100 (1s) Index</h2>
-    <div id="status" class="status">Connecting to Deriv WebSocket...</div>
-    
+    <button id="loginBtn" class="btn">Log in with Deriv</button>
+
+    <div id="userInfo" class="user-info">
+      <strong>Connected Account:</strong> <span id="accountID">--</span><br/>
+      <strong>Balance:</strong> $<span id="balance">0.00</span>
+    </div>
+
+    <h3>Volatility 100 (1s) Index</h3>
+    <div id="status" class="status">Connecting to WebSocket...</div>
     <div id="price" class="price-display">--.--</div>
-    <div id="time" class="timestamp">Waiting for tick updates...</div>
   </div>
 
   <script>
-    // Paste your App ID string from Deriv here
-const APP_ID = '34toXerShyt9Ytl63pkwo';
+    const APP_ID = '34toXerShyt9Ytl63pkwo';
     const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`);
 
+    const loginBtn = document.getElementById('loginBtn');
+    const userInfoEl = document.getElementById('userInfo');
+    const accountIDEl = document.getElementById('accountID');
+    const balanceEl = document.getElementById('balance');
     const statusEl = document.getElementById('status');
     const priceEl = document.getElementById('price');
-    const timeEl = document.getElementById('time');
 
-    let previousPrice = null;
+    loginBtn.addEventListener('click', () => {
+      const oauthUrl = `https://oauth.deriv.com/oauth2/authorize?app_id=${APP_ID}`;
+      window.location.href = oauthUrl;
+    });
+
+    function getAuthTokenFromUrl() {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('token1');
+    }
 
     ws.onopen = () => {
-      statusEl.textContent = 'Connected to Deriv API';
-      statusEl.classList.add('connected');
+      statusEl.textContent = 'Connected to Deriv Server';
 
-      const request = {
-        ticks: '1HZ100V',
-        subscribe: 1
-      };
-      ws.send(JSON.stringify(request));
+      const token = getAuthTokenFromUrl();
+      if (token) {
+        ws.send(JSON.stringify({ authorize: token }));
+      }
+
+      ws.send(JSON.stringify({ ticks: '1HZ100V', subscribe: 1 }));
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
-      if (data.msg_type === 'tick') {
-        const currentPrice = data.tick.quote;
-        const tickTime = new Date(data.tick.epoch * 1000).toLocaleTimeString();
-
-        if (previousPrice !== null) {
-          if (currentPrice > previousPrice) {
-            priceEl.className = 'price-display price-up';
-          } else if (currentPrice < previousPrice) {
-            priceEl.className = 'price-display price-down';
-          }
+      if (data.msg_type === 'authorize') {
+        if (data.error) {
+          statusEl.textContent = 'Auth Error: ' + data.error.message;
+        } else {
+          loginBtn.style.display = 'none';
+          userInfoEl.style.display = 'block';
+          accountIDEl.textContent = data.authorize.loginid;
+          balanceEl.textContent = data.authorize.balance;
+          
+          ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         }
-
-        priceEl.textContent = currentPrice.toFixed(2);
-        timeEl.textContent = `Last update: ${tickTime}`;
-        previousPrice = currentPrice;
       }
-    };
 
-    ws.onerror = (error) => {
+      if (data.msg_type === 'balance') {
+        balanceEl.textContent = data.balance.balance;
+      }
 
-      statusEl.textContent = 'Connection Error';
-      statusEl.className = 'status error';
-      console.error('WebSocket Error:', error);
-    };
-
-    ws.onclose = () => {
-      statusEl.textContent = 'Disconnected from Deriv';
-      statusEl.className = 'status error';
+      if (data.msg_type === 'tick') {
+        priceEl.textContent = data.tick.quote.toFixed(2);
+      }
     };
   </script>
 
